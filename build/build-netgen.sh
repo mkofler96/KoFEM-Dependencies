@@ -4,6 +4,7 @@ set -euo pipefail
 
 : "${NETGEN_TAG:?must be set}"
 : "${NETGEN_WASM_ROOT:?must be set}"
+: "${OCCT_WASM_ROOT:?must be set}"
 : "${EMSDK:?must be set (provided by emscripten/emsdk base image)}"
 
 SRC=/build/sources
@@ -38,7 +39,8 @@ emcmake cmake "${SRC}/netgen" \
     -DUSE_GUI=OFF \
     -DUSE_PYTHON=OFF \
     -DUSE_MPI=OFF \
-    -DUSE_OCC=OFF \
+    -DUSE_OCC=ON \
+    -DOpenCASCADE_DIR="${OCCT_WASM_ROOT}/lib/cmake/opencascade" \
     -DUSE_NUMA=OFF \
     -DUSE_NATIVE_ARCH=OFF \
     -DBUILD_SHARED_LIBS=OFF \
