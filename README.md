@@ -1,131 +1,99 @@
 # kofem-wasm-deps
 
-A dedicated builder image that compiles the C++ dependencies for the KoFEM WASM
-engine — **OCCT**, **Netgen**, and **MFEM** — to WebAssembly static libraries,
-once, so every downstream build (your laptop, CI, Claude Code) just pulls a
-ready-to-use image instead of spending hours rebuilding libraries.
+Builds **OCCT**, **Netgen**, and **MFEM** as WebAssembly static libraries inside
+an Emscripten image and publishes it to GHCR. Downstream repos pull the image
+instead of spending hours compiling C++.
 
 The image is `emscripten/emsdk` + a patched `wasm-opt` + the three libraries
-preinstalled under `/opt/kofem-deps`, with these environment variables baked in:
+under `/opt/kofem-deps`, with these env vars baked in:
 
-| Variable           | Path                       |
-|--------------------|----------------------------|
-| `OCCT_WASM_ROOT`   | `/opt/kofem-deps/occt`     |
-| `NETGEN_WASM_ROOT` | `/opt/kofem-deps/netgen`   |
-| `MFEM_WASM_ROOT`   | `/opt/kofem-deps/mfem`     |
-
-Your KoFEM `scripts/build-wasm.sh` already reads those, so it links against the
-prebuilt libs with no extra wiring.
+| Variable           | Path                     |
+|--------------------|--------------------------|
+| `OCCT_WASM_ROOT`   | `/opt/kofem-deps/occt`   |
+| `NETGEN_WASM_ROOT` | `/opt/kofem-deps/netgen` |
+| `MFEM_WASM_ROOT`   | `/opt/kofem-deps/mfem`   |
 
 ## Layout
 
 ```
 .
-├── Dockerfile                 # bakes the three libs into the emsdk image
+├── Dockerfile           # bakes the three libs into the emsdk image
 ├── build/
-│   ├── build-occt.sh          # OCCT 7.8.0
-│   ├── build-netgen.sh        # Netgen v6.2.2401 (+ emscripten zlib pic port)
-│   └── build-mfem.sh          # MFEM v4.7  <- swappable "solver" layer
-├── action.yml                 # optional: consume via `uses:`
-└── .github/workflows/publish.yml
+│   ├── build-occt.sh    # OCCT 7.8.0        — slowest, first layer
+│   ├── build-netgen.sh  # Netgen v6.2.2401
+│   └── build-mfem.sh    # MFEM v4.7         — most likely to change, last layer
+└── publish.sh           # build + push to GHCR (always run locally)
 ```
 
-Versions are `ARG`s in the `Dockerfile` (single source of truth). They're
-ordered OCCT → Netgen → MFEM so bumping MFEM doesn't invalidate the OCCT layer.
+Versions are `ARG`s in the `Dockerfile` and the single source of truth.
+Layer order (OCCT → Netgen → MFEM) means bumping MFEM never invalidates the
+OCCT layer.
 
-## Build locally
+## Building and publishing
+
+The compile takes 2-4 hours on first run (OCCT dominates), so this repo is
+**always built and published locally** — there is no CI here.
 
 ```bash
-docker build --platform linux/amd64 -t kofem-wasm-deps:dev .
+./publish.sh
 ```
 
-First build is ~2-4 hours (OCCT dominates). Override a version without editing
-files:
+This builds for `linux/amd64`, pushes to GHCR, and keeps a registry-backed
+layer cache (`:buildcache`) so subsequent publishes only recompile what changed.
+
+Tag derivation matches what GitHub Actions' metadata-action would produce:
+
+| Git state              | Tags pushed                         |
+|------------------------|-------------------------------------|
+| branch `main`          | `:main`                             |
+| tag `v1.2.3`           | `:1.2.3`, `:1.2`, `:latest`         |
 
 ```bash
-docker build --build-arg MFEM_TAG=v4.6 -t kofem-wasm-deps:mfem46 .
+git tag v1.0.0
+./publish.sh          # pushes :1.0.0, :1.0, :latest
 ```
 
-## Publishing
-
-Push a tag and the workflow builds and pushes to GHCR:
+To build without pushing (local smoke-test):
 
 ```bash
-git tag v1.0.0 && git push origin v1.0.0
-# -> ghcr.io/OWNER/kofem-wasm-deps:1.0.0, :1.0, :latest
+./publish.sh --no-push
 ```
 
-A registry-backed build cache (`:buildcache`) means only the first publish is
-slow; later ones reuse the OCCT/Netgen/MFEM layers and finish in minutes. Make
-the package public (or grant pull access) under the repo's Packages settings if
-you want anonymous pulls.
+### Build cache
 
-## Consuming the image
+Two BuildKit cache mounts persist across rebuilds on your machine:
 
-### Your dev workflow
+- **`kofem-sources`** — downloaded source tarballs. Tarballs are never
+  re-downloaded even when a layer is invalidated.
+- **`kofem-ccache`** — ccache object files. If a layer is re-run (e.g. you
+  changed an MFEM flag which also forces Netgen to re-run), ccache skips
+  recompiling any object files that didn't actually change.
 
-```bash
-docker pull ghcr.io/OWNER/kofem-wasm-deps:latest
-docker run --rm -v "$PWD":/workspace ghcr.io/OWNER/kofem-wasm-deps:latest \
-    bash scripts/build-wasm.sh
-# output lands in web/src/wasm/pkg/
-```
+Both caches are managed by BuildKit (inside Docker Desktop) and persist between
+`./publish.sh` runs.
 
-This replaces the old `scripts/docker-build-wasm.sh` in the KoFEM repo: there's
-no library cache to manage anymore because the libraries live in the image.
+## Consuming the image in another repo
 
-### CI — option A: `container:` (recommended)
-
-Run all your steps *inside* the image. Note `uses:` does not take a Docker
-image directly; the job-level `container:` key is the idiomatic way to do this:
-
-```yaml
-jobs:
-  build-wasm:
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/OWNER/kofem-wasm-deps:latest
-      credentials:                       # omit if the package is public
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-      - run: bash scripts/build-wasm.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: kofem-wasm
-          path: web/src/wasm/pkg/
-```
-
-### CI — option B: `uses:` (the literal `uses:` you wanted)
-
-If you specifically want a `uses:` step, this repo's `action.yml` wraps the
-image as a Docker container action:
+Reference the image directly with the `docker://` prefix — no action file needed:
 
 ```yaml
 steps:
   - uses: actions/checkout@v4
-  - uses: OWNER/kofem-wasm-deps@v1
-    with:
-      run: bash scripts/build-wasm.sh
+  - uses: docker://ghcr.io/michaelkofler/dependencies-kofem:latest
+  - run: bash scripts/build-wasm.sh
 ```
 
-Tradeoff: a container action pins one image tag, so you keep the action release
-tag and the image tag in sync. `container:` avoids that coupling, which is why
-it's the recommended option.
+The env vars (`OCCT_WASM_ROOT` etc.) are inherited automatically by every
+`run:` step that follows.
 
 ## Why MFEM and not NGSolve
 
-Netgen (mesher) and NGSolve (FE library) are the same project, so switching to
-NGSolve means replacing the solver while staying tied to Netgen. For a WASM
-target, MFEM is the better fit: it's a lean, dependency-light C++ library
-designed to be embedded, which is why it links cleanly here with MPI / OpenMP /
-LAPACK / METIS / SuiteSparse all off. NGSolve is large and Python-frontend
-centric (heavy pybind11, expects LAPACK) with no maintained Emscripten build,
-so a static WASM build would be a substantial porting effort and a much bigger
-binary.
+Netgen (mesher) and NGSolve (FE solver) are the same project. For a WASM target
+MFEM is the better fit: it's a lean, dependency-light C++ library designed to be
+embedded, and it links cleanly with MPI / OpenMP / LAPACK / METIS / SuiteSparse
+all disabled. NGSolve is large and Python-centric (heavy pybind11, expects
+LAPACK) with no maintained Emscripten build path.
 
-If you still want to evaluate it, the solver is isolated in
-`build/build-mfem.sh`. Add a sibling `build/build-ngsolve.sh`, point the
-Dockerfile's last build stage at it behind a build arg, and OCCT + Netgen above
-stay untouched.
+If you want to evaluate an alternative solver, it's isolated in
+`build/build-mfem.sh`. Add a sibling script, point the Dockerfile's last build
+stage at it via a build arg, and OCCT + Netgen stay untouched.
