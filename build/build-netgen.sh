@@ -19,6 +19,7 @@ ZLIB_LIB="${EM_SYSROOT}/lib/wasm32-emscripten/pic/libz.a"
 ZLIB_INC="${EM_SYSROOT}/include"
 
 echo "==> Building Netgen ${NETGEN_TAG} — ~10-20 min"
+[ -f "${SRC}/netgen.tar.gz" ] || \
 curl -fsSL "https://github.com/NGSolve/netgen/archive/refs/tags/${NETGEN_TAG}.tar.gz" \
     -o "${SRC}/netgen.tar.gz"
 mkdir -p "${SRC}/netgen"
@@ -53,5 +54,5 @@ if [ ! -f "${NETGEN_WASM_ROOT}/lib/libnglib.a" ]; then
     exit 1
 fi
 
-rm -rf "${SRC}/netgen" "${SRC}/build-netgen" "${SRC}/netgen.tar.gz"
+rm -rf "${SRC}/netgen" "${SRC}/build-netgen"
 echo "  Netgen done."

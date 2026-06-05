@@ -14,6 +14,7 @@ JOBS="$(nproc)"
 mkdir -p "${SRC}"
 
 echo "==> Building MFEM ${MFEM_TAG} — ~10-20 min"
+[ -f "${SRC}/mfem.tar.gz" ] || \
 curl -fsSL "https://github.com/mfem/mfem/archive/refs/tags/${MFEM_TAG}.tar.gz" \
     -o "${SRC}/mfem.tar.gz"
 mkdir -p "${SRC}/mfem"
@@ -48,5 +49,5 @@ if [ ! -f "${MFEM_WASM_ROOT}/lib/libmfem.a" ]; then
     exit 1
 fi
 
-rm -rf "${SRC}/mfem" "${SRC}/build-mfem" "${SRC}/mfem.tar.gz"
+rm -rf "${SRC}/mfem" "${SRC}/build-mfem"
 echo "  MFEM done."

@@ -21,7 +21,7 @@ FROM emscripten/emsdk:${EMSDK_VERSION}
 
 # ── Base build tools ─────────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        cmake ninja-build curl git python3 xz-utils ca-certificates \
+        cmake ninja-build curl git python3 xz-utils ca-certificates ccache \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Replace bundled wasm-opt ──────────────────────────────────────────────────
@@ -39,19 +39,30 @@ ENV OCCT_WASM_ROOT=${DEPS_PREFIX}/occt \
     MFEM_WASM_ROOT=${DEPS_PREFIX}/mfem
 
 WORKDIR /build
-COPY build/ /build/scripts/
 
 # ── OCCT (longest build; placed first so version bumps below don't rebuild it)─
 ARG OCCT_VERSION=7.8.0
-RUN OCCT_VERSION=${OCCT_VERSION} bash scripts/build-occt.sh
+COPY build/build-occt.sh /build/scripts/build-occt.sh
+RUN --mount=type=cache,id=kofem-sources,target=/build/sources \
+    --mount=type=cache,id=kofem-ccache,target=/root/.ccache \
+    CMAKE_C_COMPILER_LAUNCHER=ccache CMAKE_CXX_COMPILER_LAUNCHER=ccache \
+    OCCT_VERSION=${OCCT_VERSION} bash scripts/build-occt.sh
 
 # ── Netgen ────────────────────────────────────────────────────────────────────
 ARG NETGEN_TAG=v6.2.2401
-RUN NETGEN_TAG=${NETGEN_TAG} bash scripts/build-netgen.sh
+COPY build/build-netgen.sh /build/scripts/build-netgen.sh
+RUN --mount=type=cache,id=kofem-sources,target=/build/sources \
+    --mount=type=cache,id=kofem-ccache,target=/root/.ccache \
+    CMAKE_C_COMPILER_LAUNCHER=ccache CMAKE_CXX_COMPILER_LAUNCHER=ccache \
+    NETGEN_TAG=${NETGEN_TAG} bash scripts/build-netgen.sh
 
 # ── MFEM ──────────────────────────────────────────────────────────────────────
 ARG MFEM_TAG=v4.7
-RUN MFEM_TAG=${MFEM_TAG} bash scripts/build-mfem.sh
+COPY build/build-mfem.sh /build/scripts/build-mfem.sh
+RUN --mount=type=cache,id=kofem-sources,target=/build/sources \
+    --mount=type=cache,id=kofem-ccache,target=/root/.ccache \
+    CMAKE_C_COMPILER_LAUNCHER=ccache CMAKE_CXX_COMPILER_LAUNCHER=ccache \
+    MFEM_TAG=${MFEM_TAG} bash scripts/build-mfem.sh
 
 # Record what we built (handy for `docker inspect` / debugging consumers).
 RUN { \

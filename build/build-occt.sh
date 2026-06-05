@@ -12,6 +12,7 @@ mkdir -p "${SRC}"
 OCCT_TAG="V$(echo "${OCCT_VERSION}" | tr '.' '_')"
 echo "==> Building OCCT ${OCCT_VERSION} (tag ${OCCT_TAG}) — ~60-90 min on first run"
 
+[ -f "${SRC}/occt.tar.gz" ] || \
 curl -fsSL "https://github.com/Open-Cascade-SAS/OCCT/archive/refs/tags/${OCCT_TAG}.tar.gz" \
     -o "${SRC}/occt.tar.gz"
 mkdir -p "${SRC}/occt"
@@ -67,5 +68,5 @@ for OLD in TKSTEP TKSTEP209 TKSTEPAttr TKSTEPBase TKXSBase; do
 done
 
 # Drop sources/build tree so this layer only carries the installed libs.
-rm -rf "${SRC}/occt" "${SRC}/build-occt" "${SRC}/occt.tar.gz"
+rm -rf "${SRC}/occt" "${SRC}/build-occt"
 echo "  OCCT done."
