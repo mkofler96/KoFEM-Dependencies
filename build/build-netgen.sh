@@ -26,6 +26,43 @@ curl -fsSL "https://github.com/NGSolve/netgen/archive/refs/tags/${NETGEN_TAG}.ta
 mkdir -p "${SRC}/netgen"
 tar -xzf "${SRC}/netgen.tar.gz" -C "${SRC}/netgen" --strip-components=1
 
+# OCCT 7.8 removed TopoDS_Shape::HashCode(int); replace all call sites in
+# Netgen's OCC layer with std::hash<TopoDS_Shape>{} before building.
+# Uses Python to handle nested parens (e.g. std::numeric_limits<...>::max()).
+python3 - "${SRC}/netgen/libsrc/occ/" << 'PYEOF'
+import re, sys, os
+
+def replace_hashcode(content):
+    out, i = [], 0
+    pat = re.compile(r'([A-Za-z_]\w*)\.HashCode\(')
+    while True:
+        m = pat.search(content, i)
+        if not m:
+            out.append(content[i:])
+            break
+        out.append(content[i:m.start()])
+        depth, j = 1, m.end()
+        while j < len(content) and depth:
+            if   content[j] == '(': depth += 1
+            elif content[j] == ')': depth -= 1
+            j += 1
+        out.append(f'std::hash<TopoDS_Shape>{{}}({m.group(1)})')
+        i = j
+    return ''.join(out)
+
+root = sys.argv[1]
+for dirpath, _, files in os.walk(root):
+    for fname in files:
+        if not fname.endswith(('.cpp', '.cxx', '.hpp', '.hxx', '.ixx', '.jxx')):
+            continue
+        path = os.path.join(dirpath, fname)
+        original = open(path).read()
+        patched  = replace_hashcode(original)
+        if patched != original:
+            print(f'  patched {fname}')
+            open(path, 'w').write(patched)
+PYEOF
+
 mkdir -p "${SRC}/build-netgen"
 cd "${SRC}/build-netgen"
 
@@ -40,7 +77,7 @@ emcmake cmake "${SRC}/netgen" \
     -DUSE_PYTHON=OFF \
     -DUSE_MPI=OFF \
     -DUSE_OCC=ON \
-    -DOpenCASCADE_DIR="${OCCT_WASM_ROOT}/lib/cmake/opencascade" \
+    -DOpenCascade_DIR="${OCCT_WASM_ROOT}/lib/cmake/opencascade" \
     -DUSE_NUMA=OFF \
     -DUSE_NATIVE_ARCH=OFF \
     -DBUILD_SHARED_LIBS=OFF \

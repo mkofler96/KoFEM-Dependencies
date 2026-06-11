@@ -77,4 +77,4 @@ WORKDIR /workspace
 
 LABEL org.opencontainers.image.title="kofem-wasm-deps" \
       org.opencontainers.image.description="Emscripten builder with OCCT, Netgen and MFEM prebuilt as WASM static libs." \
-      org.opencontainers.image.source="https://github.com/OWNER/kofem-wasm-deps"
+      org.opencontainers.image.source="https://github.com/mkofler96/KoFEM-Dependencies"
