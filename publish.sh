@@ -5,6 +5,9 @@
 #   ./publish.sh              # auto-detects branch/tag, derives Docker tags
 #   ./publish.sh --no-push    # build only, skip push (useful for local smoke-test)
 #
+# Pushes build linux/amd64 + linux/arm64 (override via PLATFORM=...);
+# --no-push builds the host platform only, since buildx --load is single-arch.
+#
 # Prerequisites:
 #   docker buildx, gh (GitHub CLI) or a GHCR_TOKEN env var, git
 #
@@ -36,7 +39,6 @@ fi
 
 IMAGE="${GHCR_IMAGE:-ghcr.io/${GH_REPO}}"
 CACHE_REF="${IMAGE}:buildcache"
-PLATFORM="linux/amd64"
 PUSH=true
 
 # ── Flags ─────────────────────────────────────────────────────────────────────
@@ -47,6 +49,30 @@ for arg in "$@"; do
     *) echo "Unknown argument: $arg" >&2; exit 1 ;;
   esac
 done
+
+# ── Platforms ─────────────────────────────────────────────────────────────────
+# Published multi-arch so Apple Silicon consumers get a native arm64 toolchain
+# instead of Rosetta/QEMU emulation (KoFEM#176). Override with e.g.
+# PLATFORM=linux/arm64 ./publish.sh — but never push a single-arch tag over a
+# multi-arch one, or you break consumers on the other architecture.
+
+case "$(uname -m)" in
+  arm64|aarch64) HOST_PLATFORM="linux/arm64" ;;
+  x86_64|amd64)  HOST_PLATFORM="linux/amd64" ;;
+  *) echo "ERROR: Unsupported host architecture '$(uname -m)'." >&2; exit 1 ;;
+esac
+
+if $PUSH; then
+  PLATFORM="${PLATFORM:-linux/amd64,linux/arm64}"
+else
+  # buildx --load cannot import a multi-platform build into the local daemon,
+  # so a smoke-test build targets the host platform only.
+  PLATFORM="${PLATFORM:-$HOST_PLATFORM}"
+  if [[ "$PLATFORM" == *,* ]]; then
+    echo "ERROR: --no-push (buildx --load) supports a single platform; got '$PLATFORM'." >&2
+    exit 1
+  fi
+fi
 
 # ── Derive tags (mirrors docker/metadata-action logic) ────────────────────────
 

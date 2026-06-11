@@ -38,8 +38,23 @@ The compile takes 2-4 hours on first run (OCCT dominates), so this repo is
 ./publish.sh
 ```
 
-This builds for `linux/amd64`, pushes to GHCR, and keeps a registry-backed
-layer cache (`:buildcache`) so subsequent publishes only recompile what changed.
+This builds for `linux/amd64` **and** `linux/arm64`, pushes a multi-arch
+manifest to GHCR, and keeps a registry-backed layer cache (`:buildcache`) so
+subsequent publishes only recompile what changed. The arm64 variant exists so
+Apple Silicon machines run the Emscripten toolchain natively instead of under
+Rosetta/QEMU emulation — the compiled WASM output is identical.
+
+Override the platform set via `PLATFORM` (but never push a single-arch tag
+over a multi-arch one — that breaks consumers on the other architecture):
+
+```bash
+PLATFORM=linux/amd64,linux/arm64 ./publish.sh
+```
+
+On an Apple Silicon Mac the arm64 half builds natively while the amd64 half
+runs under Rosetta, so the first publish after a Dockerfile change is slow.
+Prefer publishing from an x86_64 Linux box when the amd64 layers need a full
+rebuild.
 
 Tag derivation matches what GitHub Actions' metadata-action would produce:
 
@@ -65,9 +80,10 @@ Two BuildKit cache mounts persist across rebuilds on your machine:
 
 - **`kofem-sources`** — downloaded source tarballs. Tarballs are never
   re-downloaded even when a layer is invalidated.
-- **`kofem-ccache`** — ccache object files. If a layer is re-run (e.g. you
-  changed an MFEM flag which also forces Netgen to re-run), ccache skips
-  recompiling any object files that didn't actually change.
+- **`kofem-ccache-<arch>`** — ccache object files, one cache per target
+  architecture. If a layer is re-run (e.g. you changed an MFEM flag which also
+  forces Netgen to re-run), ccache skips recompiling any object files that
+  didn't actually change.
 
 Both caches are managed by BuildKit (inside Docker Desktop) and persist between
 `./publish.sh` runs.
