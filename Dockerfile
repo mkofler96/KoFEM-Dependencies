@@ -83,6 +83,14 @@ RUN --mount=type=cache,id=kofem-sources,target=/build/sources \
     CMAKE_C_COMPILER_LAUNCHER=ccache CMAKE_CXX_COMPILER_LAUNCHER=ccache \
     MFEM_TAG=${MFEM_TAG} bash scripts/build-mfem.sh
 
+# ── Smoke test ────────────────────────────────────────────────────────────────
+# Compile and run a tiny program that links OCCT + Netgen + MFEM together and
+# exercises each (including MFEM virtual dispatch, KoFEM#175). Fails the image
+# build if the produced libraries don't actually work together, instead of
+# letting the breakage surface in the downstream engine build.
+COPY test /build/test
+RUN bash /build/test/run-smoke.sh
+
 # Record what we built (handy for `docker inspect` / debugging consumers).
 RUN { \
       echo "OCCT_VERSION=${OCCT_VERSION}"; \
