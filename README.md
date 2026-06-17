@@ -113,3 +113,28 @@ LAPACK) with no maintained Emscripten build path.
 If you want to evaluate an alternative solver, it's isolated in
 `build/build-mfem.sh`. Add a sibling script, point the Dockerfile's last build
 stage at it via a build arg, and OCCT + Netgen stay untouched.
+
+## Why `libmfem.a` is a single combined object (KoFEM#175)
+
+`build-mfem.sh` does not ship MFEM's raw multi-member archive. After the normal
+build it partial-links every MFEM object into one relocatable object and
+re-archives that as a **single-member** `libmfem.a`.
+
+The reason: the engine links MFEM by bare name (`-lmfem`). With an ordinary
+multi-member archive, `wasm-ld` pulls in only the members needed to resolve
+symbols the engine already references. MFEM's element classes (`Tetrahedron`,
+`H1_TetrahedronElement`, `IsoparametricTransformation`, …) define all their
+virtual methods inline in headers, so they have no "key function" TU — the
+vtable is a weak/COMDAT symbol scattered across TUs. Member selection could drop
+the member carrying the surviving vtable copy, leaving the WASM indirect-call
+slot null, so the first virtual dispatch traps at runtime (`null function or
+function signature mismatch`). The engine previously worked around this with a
+hand-maintained `_kofem_mfem_element_keepalive()` whitelist.
+
+A single-member archive is pulled in **whole** the moment the engine references
+any MFEM symbol, so no vtable can be selectively dropped — no engine change
+required. The build then asserts the expected element vtables are present in the
+packaged archive (`llvm-nm -C`) and fails here rather than at app runtime if one
+goes missing. Once this image is published, the engine can drop its keepalive
+whitelist. OCCT and Netgen share the same static-lib pipeline and could hit the
+same class of bug; they are left as-is for now since nothing has surfaced there.
