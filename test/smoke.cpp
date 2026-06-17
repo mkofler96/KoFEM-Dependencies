@@ -20,7 +20,13 @@
 #include <TopAbs_ShapeEnum.hxx>
 
 // ── Netgen (nglib C API) ──────────────────────────────────────────────────────
+// nglib.h declares the API at global scope, but nglib.cpp *defines* it inside
+// `namespace nglib` (it does `namespace nglib { #include "nglib.h" }`), so the
+// library exports nglib::Ng_* symbols. Consumers must replicate that wrapping
+// to resolve against libnglib.a — this mirrors the consuming engine.
+namespace nglib {
 #include <nglib.h>
+}
 
 // ── MFEM ─────────────────────────────────────────────────────────────────────
 #include "mfem.hpp"
