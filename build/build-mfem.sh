@@ -25,6 +25,12 @@ tar -xzf "${SRC}/mfem.tar.gz" -C "${SRC}/mfem" --strip-components=1
 sed -i 's/if (bind(sfd,/if (::bind(sfd,/g' \
     "${SRC}/mfem/general/isockstream.cpp"
 
+# Build in a fresh directory. ${SRC} is a persistent buildx cache mount, so a
+# stale CMakeCache.txt from an earlier configure can pin a previous compiler
+# (e.g. the native host toolchain) and silently produce ELF objects instead of
+# WASM — which then fails the relocatable combine below. Wipe to force emcmake
+# to re-detect the Emscripten toolchain every build.
+rm -rf "${SRC}/build-mfem"
 mkdir -p "${SRC}/build-mfem"
 cd "${SRC}/build-mfem"
 
