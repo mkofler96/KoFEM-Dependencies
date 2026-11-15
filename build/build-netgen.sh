@@ -29,6 +29,8 @@ tar -xzf "${SRC}/netgen.tar.gz" -C "${SRC}/netgen" --strip-components=1
 # OCCT 7.8 removed TopoDS_Shape::HashCode(int); replace all call sites in
 # Netgen's OCC layer with std::hash<TopoDS_Shape>{} before building.
 # Uses Python to handle nested parens (e.g. std::numeric_limits<...>::max()).
+# Needed for v6.2.2401 and older; v6.2.2608 no longer calls HashCode, so the
+# patch finds nothing there and is kept only for builds of older tags.
 python3 - "${SRC}/netgen/libsrc/occ/" << 'PYEOF'
 import re, sys, os
 

@@ -20,7 +20,7 @@ under `/opt/kofem-deps`, with these env vars baked in:
 ├── Dockerfile           # bakes the three libs into the emsdk image
 ├── build/
 │   ├── build-occt.sh    # OCCT 7.8.0        — slowest, first layer
-│   ├── build-netgen.sh  # Netgen v6.2.2401
+│   ├── build-netgen.sh  # Netgen v6.2.2608
 │   └── build-mfem.sh    # MFEM v4.7         — most likely to change, last layer
 └── publish.sh           # build + push to GHCR (always run locally)
 ```

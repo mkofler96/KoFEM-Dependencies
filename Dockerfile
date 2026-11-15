@@ -57,7 +57,7 @@ RUN --mount=type=cache,id=kofem-sources,target=/build/sources \
     OCCT_VERSION=${OCCT_VERSION} bash scripts/build-occt.sh
 
 # ── Netgen ────────────────────────────────────────────────────────────────────
-ARG NETGEN_TAG=v6.2.2401
+ARG NETGEN_TAG=v6.2.2608
 COPY build/build-netgen.sh /build/scripts/build-netgen.sh
 RUN --mount=type=cache,id=kofem-sources,target=/build/sources \
     --mount=type=cache,id=kofem-ccache-${TARGETARCH},target=/root/.ccache \
